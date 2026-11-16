@@ -21,7 +21,7 @@ pip install -r requirements.txt
 ## Pipeline
 | Étape | Commande | Sortie |
 |---|---|---|
-| 1. Ingestion | `python -m src.ingest --src <dossier_json> --max-files 100` | `data/interim/facts_long.parquet` |
+| 1. | 1. Ingestion | `python -m src.ingest --src <dossier_json>` | `data/interim/facts_long/` — 3,0 M lignes, 14 081 entreprises, 25 concepts (10-K, USD) — ~35 min |
 | 2. Table wide (dédup) | à venir | `data/interim/balance_sheet_wide.parquet` |
 | 3. Cibles t→t+1 + features | à venir | |
 | 4. Split temporel | à venir | |

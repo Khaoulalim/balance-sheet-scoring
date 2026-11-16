@@ -1,0 +1,26 @@
+# Données : jamais dans Git (trop lourdes, téléchargeables depuis la SEC)
+data/raw/*
+data/interim/*
+data/processed/*
+!data/**/.gitkeep
+
+# Modèles entraînés
+*.joblib
+*.pkl
+models/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Outils
+.zen/
+.vscode/
+.idea/
+.DS_Store

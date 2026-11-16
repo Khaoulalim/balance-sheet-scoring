@@ -7,7 +7,7 @@ Lit soit le dossier de JSON dézippés, soit le zip directement. Garde uniquemen
   - les concepts de bilan listés dans src/concepts.py
   - les formulaires choisis (10-K par défaut)
 
-Sortie : data/interim/facts_long.parquet
+Sortie : data/interim/facts_long/part-*.parquet  (relire : pd.read_parquet("data/interim/facts_long"))
   colonnes : cik, concept, val, end, filed, form, fy, fp, accn
 
 Usage :
@@ -75,38 +75,70 @@ def _iter_sources(src: Path, max_files: int):
             yield name, (lambda n=name: zf.read(n))
 
 
-def ingest(src: Path, out_path: Path, forms: list[str], max_files: int = 0) -> pd.DataFrame:
+def _to_frame(rows: list[dict]) -> pd.DataFrame:
+    df = pd.DataFrame(rows, columns=COLUMNS)
+    df["end"] = pd.to_datetime(df["end"], errors="coerce")
+    df["filed"] = pd.to_datetime(df["filed"], errors="coerce")
+    df["val"] = pd.to_numeric(df["val"], errors="coerce")
+    df["fy"] = pd.to_numeric(df["fy"], errors="coerce").astype("Int64")
+    return df
+
+
+def ingest(src: Path, out_dir: Path, forms: list[str], max_files: int = 0,
+           batch_size: int = 1000) -> None:
+    """Écrit le résultat par blocs (part-00000.parquet, ...) pour ne pas saturer la RAM.
+    Relire ensuite avec : pd.read_parquet("data/interim/facts_long")"""
     if not src.exists():
         raise FileNotFoundError(f"Introuvable : {src}")
     concepts = set(BALANCE_SHEET_CONCEPTS)
     forms_set = set(forms)
-    all_rows: list[dict] = []
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    for old in out_dir.glob("part-*.parquet"):   # repartir de zéro à chaque exécution
+        old.unlink()
+
+    rows: list[dict] = []
+    n_rows, n_parts, n_skipped = 0, 0, 0
+    ciks: set[str] = set()
+    concepts_seen: set[str] = set()
+
+    def flush() -> None:
+        nonlocal rows, n_rows, n_parts
+        if not rows:
+            return
+        df = _to_frame(rows)
+        df.to_parquet(out_dir / f"part-{n_parts:05d}.parquet", index=False)
+        n_rows += len(df)
+        n_parts += 1
+        rows = []
 
     sources = list(_iter_sources(src, max_files))
-    for name, read in tqdm(sources, desc="Entreprises"):
+    for i, (name, read) in enumerate(tqdm(sources, desc="Entreprises"), start=1):
         try:
-            all_rows.extend(parse_company(read(), concepts, forms_set))
+            company_rows = parse_company(read(), concepts, forms_set)
         except (json.JSONDecodeError, KeyError, UnicodeDecodeError) as e:
+            n_skipped += 1
             print(f"[skip] {name}: {e}")
+            continue
+        if company_rows:
+            ciks.add(company_rows[0]["cik"])
+            concepts_seen.update(r["concept"] for r in company_rows)
+            rows.extend(company_rows)
+        if i % batch_size == 0:
+            flush()
+    flush()
 
-    df = pd.DataFrame(all_rows, columns=COLUMNS)
-    df["end"] = pd.to_datetime(df["end"], errors="coerce")
-    df["filed"] = pd.to_datetime(df["filed"], errors="coerce")
-    df["val"] = pd.to_numeric(df["val"], errors="coerce")
-
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    df.to_parquet(out_path, index=False)
-
-    print(f"\n✅ {len(df):,} lignes | {df['cik'].nunique():,} entreprises | "
-          f"{df['concept'].nunique()} concepts -> {out_path}")
-    return df
+    print(f"\n✅ {n_rows:,} lignes | {len(ciks):,} entreprises | "
+          f"{len(concepts_seen)} concepts | {n_parts} fichiers -> {out_dir}"
+          + (f" | {n_skipped} fichiers ignorés" if n_skipped else ""))
 
 
 def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument("--src", default="data/raw/companyfacts",
                    help="Dossier de JSON dézippés OU fichier companyfacts.zip")
-    p.add_argument("--out", default="data/interim/facts_long.parquet")
+    p.add_argument("--out", default="data/interim/facts_long",
+                   help="Dossier de sortie (fichiers part-*.parquet)")
     p.add_argument("--forms", nargs="+", default=["10-K", "10-K/A"])
     p.add_argument("--max-files", type=int, default=0)
     a = p.parse_args()

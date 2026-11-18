@@ -152,5 +152,5 @@ Tous les paramètres (seuils, dates de découpage, hyperparamètres, poids) sont
 
 ---
 
-*Projet réalisé dans le cadre du cours Analytics Edge (EMINES — UM6P, 2026).*
-**Khaoula LIMAM** — élève ingénieure en Management Industriel, option Data Sciences Industrielles · [LinkedIn](https://www.linkedin.com/in/khaoula-limam-6470a2335)
+*Projet réalisé dans le cadre du cours Analytics Edge (EMINES - UM6P, 2026).*
+**Khaoula LIMAM** - élève ingénieure en Management Industriel, option Data Sciences Industrielles · [LinkedIn](https://www.linkedin.com/in/khaoula-limam-6470a2335)

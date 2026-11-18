@@ -17,7 +17,8 @@ from app.logic import (EVENEMENTS, NIVEAUX, RATIOS, annee_par_defaut, bilan_anci
                        libelle_entreprise, points_forts, prepare, rapport_html, resume_executif,
                        risque_ratios, signaux)
 from src import config  # noqa: E402
-from src.predict_one import COLONNES_FAITS, FAITS, AnalyseImpossible, analyser, faits_bilan  # noqa: E402
+from src.predict_one import COLONNES_FAITS, FAITS, AnalyseImpossible, analyser  # noqa: E402
+from src.predict_one import faits_bilan as extraire_faits  # noqa: E402
 
 st.set_page_config(page_title="Alerte santé financière", page_icon="📉", layout="wide")
 COULEUR_NIVEAU = {"Faible": "🟢", "Modéré": "🟡", "Élevé": "🟠", "Très élevé": "🔴"}
@@ -60,7 +61,7 @@ def analyse_depuis_base(cik: str) -> dict:
     res["historique_scores"] = hist.set_index(hist["annee"].astype(str))["score"]
     if faits_bilan is not None:
         f = faits_bilan[(faits_bilan["cik"] == cik) & (faits_bilan["end"] == res["end"])]
-        res["faits"] = faits_bilan(f.iloc[0]) if len(f) else {lib: float("nan") for lib in FAITS.values()}
+        res["faits"] = extraire_faits(f.iloc[0]) if len(f) else {lib: float("nan") for lib in FAITS.values()}
     return res
 
 

@@ -1,0 +1,5 @@
+événement,n,fréquence,AUC modèle,AUC meilleure règle,AP modèle,taux top 10 %,lift top 10 %
+Capitaux propres : perte > 10 % des actifs,14013,0.2,0.856,0.792,0.541,0.599,2.993
+Trésorerie divisée par 2 ou plus,12472,0.152,0.709,0.524,0.312,0.369,2.423
+Actifs en baisse de plus de 20 %,15186,0.147,0.864,0.76,0.492,0.499,3.397
+Capitaux propres deviennent négatifs,12262,0.038,0.932,0.725,0.325,0.269,7.169

@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import zipfile
 from pathlib import Path
 
@@ -31,10 +32,21 @@ from src.concepts import BALANCE_SHEET_CONCEPTS
 COLUMNS = ["cik", "concept", "val", "end", "filed", "form", "fy", "fp", "accn"]
 
 
-def parse_company(raw: bytes, concepts: set[str], forms: set[str]) -> list[dict]:
-    """Transforme le JSON d'une entreprise en lignes (format long)."""
+def cik_from_name(name: str) -> str | None:
+    """'CIK0000001750.json' -> '0000001750' (le nom du fichier est la source la plus fiable)."""
+    m = re.search(r"CIK(\d{10})", name)
+    return m.group(1) if m else None
+
+
+def parse_company(raw: bytes, concepts: set[str], forms: set[str],
+                  cik_hint: str | None = None) -> list[dict]:
+    """Transforme le JSON d'une entreprise en lignes (format long).
+    cik_hint : CIK lu dans le nom du fichier. Certains JSON ont un champ "cik" vide ou à 0 :
+    sans ce garde-fou, des entreprises différentes se retrouvaient fusionnées sous '0000000000'."""
     data = json.loads(raw)
-    cik = str(data.get("cik", "")).zfill(10)
+    cik = cik_hint or str(data.get("cik") or "").zfill(10)
+    if not cik.strip("0"):          # CIK vide ou nul -> on ne peut pas identifier l'entreprise
+        return []
     usgaap = data.get("facts", {}).get("us-gaap", {})
 
     rows = []
@@ -115,7 +127,7 @@ def ingest(src: Path, out_dir: Path, forms: list[str], max_files: int = 0,
     sources = list(_iter_sources(src, max_files))
     for i, (name, read) in enumerate(tqdm(sources, desc="Entreprises"), start=1):
         try:
-            company_rows = parse_company(read(), concepts, forms_set)
+            company_rows = parse_company(read(), concepts, forms_set, cik_from_name(name))
         except (json.JSONDecodeError, KeyError, UnicodeDecodeError) as e:
             n_skipped += 1
             print(f"[skip] {name}: {e}")

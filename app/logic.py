@@ -76,3 +76,65 @@ def libelle_entreprise(df: pd.DataFrame) -> dict[str, str]:
     """cik -> « Nom (CIK) », pour la liste de recherche."""
     d = derniers_bilans(df)
     return dict(zip(d["cik"], d["nom"] + " (" + d["cik"].str.lstrip("0") + ")"))
+
+
+# ------------------------------------------------------------------ cartes, résumé, rapport
+def couleur(rang: float) -> str:
+    """Code couleur d'un rang de risque (0-100), aligné sur les niveaux du score."""
+    if pd.isna(rang):
+        return "⚪"
+    return "🟢" if rang < 50 else "🟡" if rang < 75 else "🟠" if rang < 90 else "🔴"
+
+
+def risque_ratios(valeurs: dict, reference: pd.DataFrame) -> dict:
+    """Rang de risque (0-100) de chaque ratio d'une entreprise par rapport aux entreprises de référence."""
+    out = {}
+    for r, (_, sens) in RATIOS.items():
+        v, ref = valeurs.get(r), reference[r].dropna() if r in reference else pd.Series(dtype=float)
+        out[f"risque_{r}"] = float(((sens * ref) < sens * v).mean() * 100) if pd.notna(v) and len(ref) else float("nan")
+    return out
+
+
+def resume_executif(res: dict) -> str:
+    """Une phrase de synthèse pour le banquier."""
+    pire = max(EVENEMENTS, key=lambda e: res.get(f"rang_{e}", 0) or 0)
+    phrase = (f"Niveau de risque {res['niveau'].lower()} : score de {res['score']:.0f}/100, "
+              f"soit plus risquée que {res['score']:.0f} % des entreprises de la même année. ")
+    if res["niveau"] in ("Élevé", "Très élevé"):
+        phrase += (f"Principal point d'attention : {EVENEMENTS[pire].lower()} "
+                   f"(probabilité {res[f'p_{pire}']:.0%}). Analyse approfondie recommandée.")
+    elif res["niveau"] == "Modéré":
+        phrase += f"À surveiller en priorité : {EVENEMENTS[pire].lower()}."
+    else:
+        phrase += "Pas de signal de dégradation marqué pour l'année suivante."
+    return phrase
+
+
+def rapport_html(res: dict) -> str:
+    """Rapport autonome à télécharger (s'ouvre dans un navigateur, imprimable en PDF)."""
+    lignes_risques = "".join(
+        f"<tr><td>{couleur(res[f'rang_{e}'])} {lib}</td><td>{res[f'p_{e}']:.0%}</td>"
+        f"<td>{res[f'rang_{e}']:.0f} %</td></tr>" for e, lib in EVENEMENTS.items())
+    faits = res.get("faits") or {}
+    lignes_faits = "".join(f"<tr><td>{k}</td><td>{v:,.0f} $</td></tr>".replace(",", " ")
+                           for k, v in faits.items() if pd.notna(v))
+    liste = lambda items: "".join(f"<li>{s}</li>" for s in items) or "<li>Aucun</li>"
+    return f"""<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8">
+<title>Analyse de risque — {res['nom']}</title>
+<style>body{{font-family:Arial,sans-serif;max-width:820px;margin:32px auto;color:#222;line-height:1.45}}
+h1{{font-size:22px}}h2{{font-size:16px;margin-top:24px}}table{{border-collapse:collapse;width:100%}}
+td,th{{border-bottom:1px solid #ddd;padding:6px 8px;text-align:left}}.score{{font-size:28px;font-weight:bold}}
+.note{{color:#666;font-size:12px;margin-top:28px}}</style></head><body>
+<h1>Analyse de risque financier — {res['nom']}</h1>
+<p>Dernier bilan : {pd.Timestamp(res['end']).date()} · comparé à {res.get('n_reference', '')} entreprises
+de l'année {res.get('annee_reference', pd.Timestamp(res['end']).year)}</p>
+<p class="score">Score {res['score']:.0f}/100 — {res['niveau']}</p>
+<p><b>Résumé :</b> {resume_executif(res)}</p>
+<h2>Risque de dégradation l'année suivante</h2>
+<table><tr><th>Événement</th><th>Probabilité</th><th>Plus risquée que</th></tr>{lignes_risques}</table>
+<h2>Chiffres du dernier bilan</h2><table>{lignes_faits}</table>
+<h2>Signaux de fragilité</h2><ul>{liste(signaux(res))}</ul>
+<h2>Points forts</h2><ul>{liste(points_forts(res))}</ul>
+<p class="note">Modèles HistGradientBoosting appris sur les bilans SEC (10-K). Évaluation sur 2022-2024, années
+non vues : AUC de 0,71 à 0,93 selon l'événement. Outil d'aide à la décision : ne remplace pas l'analyse
+d'un crédit (gouvernance, secteur, garanties, conjoncture).</p></body></html>"""

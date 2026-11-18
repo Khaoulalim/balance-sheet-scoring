@@ -28,6 +28,22 @@ FAITS = {
 }
 
 
+# Poste -> étiquette de repli quand l'entreprise utilise un autre concept XBRL pour la même notion
+REPLI = {"CashAndCashEquivalentsAtCarryingValue": "CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents"}
+COLONNES_FAITS = list(FAITS) + list(REPLI.values())
+
+
+def faits_bilan(ligne) -> dict:
+    """Chiffres affichés d'un bilan (dict ou Series), avec repli sur l'étiquette alternative."""
+    out = {}
+    for col, lib in FAITS.items():
+        v = ligne.get(col, np.nan)
+        if pd.isna(v) and col in REPLI:
+            v = ligne.get(REPLI[col], np.nan)
+        out[lib] = v
+    return out
+
+
 class AnalyseImpossible(ValueError):
     """Le fichier ne permet pas d'analyse (pas de 10-K exploitable, actifs < 1 M$...)."""
 
@@ -72,7 +88,7 @@ def analyser(raw: bytes, modeles: dict, reference: pd.DataFrame) -> dict:
     res = {"nom": nom, "cik": ligne["cik"].iloc[0], "end": fin, "annee_reference": annee,
            "n_reference": len(ref), "historique": len(table)}
     dernier_bilan = wide.sort_values("end").iloc[-1]
-    res["faits"] = {lib: dernier_bilan.get(col, np.nan) for col, lib in FAITS.items()}
+    res["faits"] = faits_bilan(dernier_bilan)
 
     res["CP_deja_negatifs"] = bool(ligne["E_A"].iloc[0] < 0)
     brut = 0.0

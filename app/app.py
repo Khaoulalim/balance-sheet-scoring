@@ -17,7 +17,7 @@ from app.logic import (EVENEMENTS, NIVEAUX, RATIOS, annee_par_defaut, bilan_anci
                        libelle_entreprise, points_forts, prepare, rapport_html, resume_executif,
                        risque_ratios, signaux)
 from src import config  # noqa: E402
-from src.predict_one import FAITS, AnalyseImpossible, analyser  # noqa: E402
+from src.predict_one import COLONNES_FAITS, FAITS, AnalyseImpossible, analyser, faits_bilan  # noqa: E402
 
 st.set_page_config(page_title="Alerte santé financière", page_icon="📉", layout="wide")
 COULEUR_NIVEAU = {"Faible": "🟢", "Modéré": "🟡", "Élevé": "🟠", "Très élevé": "🔴"}
@@ -32,7 +32,8 @@ def charger():
     lire = lambda nom: pd.read_csv(config.REPORTS / nom, index_col=0) if (config.REPORTS / nom).exists() else None
     faits = None
     if config.BALANCE_WIDE.exists():
-        faits = pd.read_parquet(config.BALANCE_WIDE, columns=["cik", "end"] + list(FAITS))
+        faits = pd.read_parquet(config.BALANCE_WIDE)
+        faits = faits[["cik", "end"] + [c for c in COLONNES_FAITS if c in faits]]
     return df, lire("metrics_test.csv"), lire("score_par_niveau_test.csv"), faits
 
 
@@ -59,7 +60,7 @@ def analyse_depuis_base(cik: str) -> dict:
     res["historique_scores"] = hist.set_index(hist["annee"].astype(str))["score"]
     if faits_bilan is not None:
         f = faits_bilan[(faits_bilan["cik"] == cik) & (faits_bilan["end"] == res["end"])]
-        res["faits"] = {lib: (f[col].iloc[0] if len(f) else float("nan")) for col, lib in FAITS.items()}
+        res["faits"] = faits_bilan(f.iloc[0]) if len(f) else {lib: float("nan") for lib in FAITS.values()}
     return res
 
 

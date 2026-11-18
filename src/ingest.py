@@ -8,13 +8,16 @@ Lit soit le dossier de JSON dézippés, soit le zip directement. Garde uniquemen
   - les formulaires choisis (10-K par défaut)
 
 Sortie : data/interim/facts_long/part-*.parquet  (relire : pd.read_parquet("data/interim/facts_long"))
-  colonnes : cik, concept, val, end, filed, form, fy, fp, accn
+  colonnes : cik, concept, val, start, end, filed, form, fy, fp, accn
+  (start = début de période, renseigné seulement pour les flux)
+  --set flux -> data/interim/flows_long/
 
 Usage :
   python -m src.ingest                                   # dossier data/raw/companyfacts
   python -m src.ingest --src "E:/DSI/projet analytics edge" --max-files 100
   python -m src.ingest --src data/raw/companyfacts.zip   # lit le zip sans dézipper
   python -m src.ingest --forms 10-K 10-K/A 10-Q 10-Q/A
+  python -m src.ingest --src "E:/DSI/projet analytics edge" --set flux   # compte de résultat + flux
 """
 from __future__ import annotations
 
@@ -27,9 +30,12 @@ from pathlib import Path
 import pandas as pd
 from tqdm import tqdm
 
-from src.concepts import BALANCE_SHEET_CONCEPTS
+from src.concepts import BALANCE_SHEET_CONCEPTS, FLOW_CONCEPTS
 
-COLUMNS = ["cik", "concept", "val", "end", "filed", "form", "fy", "fp", "accn"]
+CONCEPT_SETS = {"bilan": BALANCE_SHEET_CONCEPTS, "flux": FLOW_CONCEPTS}
+DEFAULT_OUT = {"bilan": "data/interim/facts_long", "flux": "data/interim/flows_long"}
+
+COLUMNS = ["cik", "concept", "val", "start", "end", "filed", "form", "fy", "fp", "accn"]
 
 
 def cik_from_name(name: str) -> str | None:
@@ -60,6 +66,7 @@ def parse_company(raw: bytes, concepts: set[str], forms: set[str],
                 "cik": cik,
                 "concept": concept,
                 "val": fact.get("val"),
+                "start": fact.get("start"),      # None pour un poste de bilan (date), renseigné pour un flux (période)
                 "end": fact.get("end"),
                 "filed": fact.get("filed"),
                 "form": fact.get("form"),
@@ -89,6 +96,7 @@ def _iter_sources(src: Path, max_files: int):
 
 def _to_frame(rows: list[dict]) -> pd.DataFrame:
     df = pd.DataFrame(rows, columns=COLUMNS)
+    df["start"] = pd.to_datetime(df["start"], errors="coerce")
     df["end"] = pd.to_datetime(df["end"], errors="coerce")
     df["filed"] = pd.to_datetime(df["filed"], errors="coerce")
     df["val"] = pd.to_numeric(df["val"], errors="coerce")
@@ -97,12 +105,12 @@ def _to_frame(rows: list[dict]) -> pd.DataFrame:
 
 
 def ingest(src: Path, out_dir: Path, forms: list[str], max_files: int = 0,
-           batch_size: int = 1000) -> None:
+           batch_size: int = 1000, concept_set: str = "bilan") -> None:
     """Écrit le résultat par blocs (part-00000.parquet, ...) pour ne pas saturer la RAM.
     Relire ensuite avec : pd.read_parquet("data/interim/facts_long")"""
     if not src.exists():
         raise FileNotFoundError(f"Introuvable : {src}")
-    concepts = set(BALANCE_SHEET_CONCEPTS)
+    concepts = set(CONCEPT_SETS[concept_set])
     forms_set = set(forms)
 
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -149,12 +157,15 @@ def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument("--src", default="data/raw/companyfacts",
                    help="Dossier de JSON dézippés OU fichier companyfacts.zip")
-    p.add_argument("--out", default="data/interim/facts_long",
-                   help="Dossier de sortie (fichiers part-*.parquet)")
+    p.add_argument("--set", dest="concept_set", choices=["bilan", "flux"], default="bilan",
+                   help="bilan = postes du bilan ; flux = compte de résultat + flux de trésorerie")
+    p.add_argument("--out", default=None,
+                   help="Dossier de sortie (défaut : facts_long pour bilan, flows_long pour flux)")
     p.add_argument("--forms", nargs="+", default=["10-K", "10-K/A"])
     p.add_argument("--max-files", type=int, default=0)
     a = p.parse_args()
-    ingest(Path(a.src), Path(a.out), a.forms, a.max_files)
+    out = Path(a.out or DEFAULT_OUT[a.concept_set])
+    ingest(Path(a.src), out, a.forms, a.max_files, concept_set=a.concept_set)
 
 
 if __name__ == "__main__":

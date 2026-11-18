@@ -38,3 +38,24 @@ BALANCE_SHEET_CONCEPTS = [
     "AdditionalPaidInCapital",
     "AccumulatedOtherComprehensiveIncomeLossNetOfTax",
 ]
+
+# Postes de FLUX (compte de résultat + tableau des flux de trésorerie) :
+# ils couvrent une période (start -> end), pas une date. On garde les périodes d'environ 1 an.
+FLOW_CONCEPTS = [
+    # Compte de résultat
+    "Revenues",
+    "RevenueFromContractWithCustomerExcludingAssessedTax",   # chiffre d'affaires (norme ASC 606, depuis 2018)
+    "SalesRevenueNet",                                       # chiffre d'affaires (ancienne étiquette)
+    "OperatingIncomeLoss",                                   # résultat d'exploitation
+    "NetIncomeLoss",                                         # résultat net
+    "InterestExpense",                                       # charges d'intérêts
+    "DepreciationDepletionAndAmortization",                  # amortissements
+
+    # Flux de trésorerie
+    "NetCashProvidedByUsedInOperatingActivities",            # cash généré par l'activité
+    "NetCashProvidedByUsedInInvestingActivities",            # cash investi
+    "NetCashProvidedByUsedInFinancingActivities",            # cash de financement
+    "PaymentsToAcquirePropertyPlantAndEquipment",            # investissements (capex)
+    "PaymentsOfDividends",                                   # dividendes versés
+    "PaymentsForRepurchaseOfCommonStock",                    # rachats d'actions
+]

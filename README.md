@@ -2,7 +2,7 @@
 
 ![tests](https://github.com/Khaoulalim/balance-sheet-scoring/actions/workflows/tests.yml/badge.svg)
 
-**Prédire, à partir des rapports annuels déposés à la SEC, quelles entreprises vont subir une forte dégradation de leur bilan l'année suivante** — et en tirer un score de risque de 0 à 100 utilisable par un analyste crédit.
+**Prédire, à partir des rapports annuels déposés à la SEC, quelles entreprises vont subir une forte dégradation de leur bilan l'année suivante**, et en tirer un score de risque de 0 à 100 utilisable par un analyste crédit.
 
 Sur des années jamais vues pendant l'entraînement (2022-2024), le modèle détecte les entreprises dont les capitaux propres vont devenir négatifs avec une **AUC de 0,93** : les 10 % d'entreprises qu'il signale concentrent **7 fois plus** de cas que la moyenne.
 

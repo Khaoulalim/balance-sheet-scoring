@@ -6,6 +6,7 @@
   3. moyenne pondérée des rangs (poids : config.POIDS), re-classée dans l'année
      -> score 95 = « plus risquée que 95 % des entreprises de la même année »
   4. niveau : Faible < 50 <= Modéré < 75 <= Élevé < 90 <= Très élevé
+  Capitaux propres déjà négatifs : rang 100 sur la dimension « CP négatifs » (événement déjà survenu).
 
 Vérification honnête : le score des années de test calculé avec les modèles d'ÉVALUATION (<= 2021)
 -> taux réel de chaque dégradation par niveau (reports/score_par_niveau_test.csv).
@@ -31,6 +32,10 @@ def scorer(table: pd.DataFrame, modeles: dict) -> pd.DataFrame:
     for nom, m in modeles.items():
         out[f"p_{nom}"] = m.predict_proba(table[list(m.feature_names_in_)])[:, 1]
         out[f"rang_{nom}"] = out.groupby("annee")[f"p_{nom}"].rank(pct=True) * 100
+    # Capitaux propres DÉJÀ négatifs : l'événement a déjà eu lieu (le modèle n'a appris que sur E > 0)
+    # -> rang maximal sur cette dimension, au lieu d'une probabilité hors domaine
+    out["CP_deja_negatifs"] = table["E_A"] < 0
+    out.loc[out["CP_deja_negatifs"], "rang_CP_negatifs"] = 100.0
     brut = sum(w * out[f"rang_{nom}"] for nom, w in config.POIDS.items())
     out["score"] = brut.groupby(out["annee"]).rank(pct=True) * 100
     bornes, labels = config.NIVEAUX

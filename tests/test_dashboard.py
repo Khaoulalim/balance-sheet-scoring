@@ -39,3 +39,14 @@ def test_derniers_bilans_et_libelles():
     assert len(derniers_bilans(df)) == 3
     assert libelle_entreprise(df)["0000000001"] == "Alpha (1)"
     assert annee_par_defaut(df, minimum=2) == 2024
+
+
+def test_textes_cas_particuliers():
+    from app.logic import bilan_ancien, resume_executif, texte_proba
+    res = {"nom": "X", "end": pd.Timestamp("2015-12-31"), "score": 80.0, "niveau": "Élevé",
+           "CP_deja_negatifs": True, "p_CP_negatifs": 0.5, "rang_CP_negatifs": 100.0,
+           "p_perte_CP": 0.5, "rang_perte_CP": 90.0, "p_actifs_chute": 0.1, "rang_actifs_chute": 10.0,
+           "p_treso_moitie": 0.2, "rang_treso_moitie": 60.0}
+    assert texte_proba(res, "CP_negatifs") == "Déjà négatifs" and texte_proba(res, "perte_CP") == "50 %"
+    assert "déjà négatifs" in resume_executif(res) and "perte de capitaux propres" in resume_executif(res)
+    assert bilan_ancien(res, 2026) is not None and bilan_ancien({**res, "end": pd.Timestamp("2025-12-31")}, 2026) is None

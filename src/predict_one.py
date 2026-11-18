@@ -74,11 +74,14 @@ def analyser(raw: bytes, modeles: dict, reference: pd.DataFrame) -> dict:
     dernier_bilan = wide.sort_values("end").iloc[-1]
     res["faits"] = {lib: dernier_bilan.get(col, np.nan) for col, lib in FAITS.items()}
 
+    res["CP_deja_negatifs"] = bool(ligne["E_A"].iloc[0] < 0)
     brut = 0.0
     for nom_evt, m in modeles.items():
         p = float(m.predict_proba(ligne[list(m.feature_names_in_)])[:, 1][0])
         res[f"p_{nom_evt}"] = p
         res[f"rang_{nom_evt}"] = rang_dans(ref[f"p_{nom_evt}"], p)
+        if nom_evt == "CP_negatifs" and res["CP_deja_negatifs"]:
+            res[f"rang_{nom_evt}"] = 100.0           # événement déjà survenu (même règle que src/score.py)
         brut += config.POIDS[nom_evt] * res[f"rang_{nom_evt}"]
 
     brut_ref = sum(w * ref[f"rang_{n}"] for n, w in config.POIDS.items())

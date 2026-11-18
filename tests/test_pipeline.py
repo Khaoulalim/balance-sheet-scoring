@@ -107,3 +107,15 @@ def test_entrainement_et_score_bout_en_bout(donnees, tmp_path):
     # chaque année : environ 10 % des entreprises en « Très élevé »
     part = scores.groupby("annee")["niveau"].apply(lambda s: (s == "Très élevé").mean())
     assert part.between(0.05, 0.2).all()
+
+
+def test_capitaux_propres_deja_negatifs(donnees):
+    """Événement déjà survenu : rang maximal sur la dimension « CP négatifs », pas une probabilité hors domaine."""
+    from src.score import scorer
+    from src.train import fit
+    *_, table = donnees
+    t = add_split(table)
+    s = scorer(table, fit(t, ["train", "val", "test"]))
+    deja = table["E_A"] < 0
+    assert deja.any()
+    assert (s.loc[deja, "rang_CP_negatifs"] == 100).all() and s.loc[deja, "CP_deja_negatifs"].all()

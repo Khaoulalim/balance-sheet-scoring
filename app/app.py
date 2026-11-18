@@ -13,7 +13,7 @@ import streamlit as st
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from app.logic import (EVENEMENTS, NIVEAUX, RATIOS, annee_par_defaut, couleur,  # noqa: E402
+from app.logic import (EVENEMENTS, NIVEAUX, RATIOS, annee_par_defaut, bilan_ancien, couleur, texte_proba,  # noqa: E402
                        libelle_entreprise, points_forts, prepare, rapport_html, resume_executif,
                        risque_ratios, signaux)
 from src import config  # noqa: E402
@@ -76,7 +76,7 @@ def cartes_faits(res: dict) -> None:
             st.markdown(f"**{v:,.0f} $**".replace(",", " ") if pd.notna(v) else "—")
 
 
-def afficher(res: dict, cle: str, compact: bool = False) -> None:
+def afficher(res: dict, cle: str, compact: bool = False, cartes: bool = True) -> None:
     niv = res["niveau"]
     st.markdown(f"### {res['nom']}")
     a, b, c = st.columns(3)
@@ -84,10 +84,13 @@ def afficher(res: dict, cle: str, compact: bool = False) -> None:
     b.metric("Niveau", f"{COULEUR_NIVEAU[niv]} {niv}")
     c.metric("Dernier bilan", str(pd.Timestamp(res["end"]).date()))
 
+    alerte = bilan_ancien(res, int(df["annee"].max()))
+    if alerte:
+        st.warning(f"⚠️ {alerte}")
     resume = resume_executif(res)
     {"Faible": st.success, "Modéré": st.info, "Élevé": st.warning, "Très élevé": st.error}[niv](resume)
 
-    if not compact:
+    if cartes and not compact:
         cartes_faits(res)
 
     st.markdown("**Risque de dégradation l'année suivante**")
@@ -96,8 +99,13 @@ def afficher(res: dict, cle: str, compact: bool = False) -> None:
         rang = res[f"rang_{e}"]
         with cols[i % len(cols)].container(border=True):
             st.markdown(f"{couleur(rang)} **{lib}**")
-            st.markdown(f"Probabilité **{res[f'p_{e}']:.0%}**")
-            st.caption(f"Plus risquée que {rang:.0f} % des entreprises")
+            st.markdown(f"Probabilité **{texte_proba(res, e)}**" if texte_proba(res, e)[0].isdigit()
+                        else f"**{texte_proba(res, e)}** (situation actuelle)")
+            if not texte_proba(res, e)[0].isdigit():
+                st.caption("Événement déjà survenu : rang de risque maximal")
+            else:
+                st.caption(f"Plus risquée que {rang:.0f} % des entreprises" if rang >= 50
+                           else f"Moins risquée que {100 - rang:.0f} % des entreprises")
 
     g, d = st.columns(2)
     with g:
@@ -167,7 +175,7 @@ with t_import:
                     st.session_state["analyse_ok"] = fichier.name
                 if st.session_state.get("analyse_ok") == fichier.name:
                     st.divider()
-                    afficher({**res, "faits": None}, "import")
+                    afficher(res, "import", cartes=False)   # cartes déjà affichées au-dessus, mais gardées pour le rapport
             except AnalyseImpossible as err:
                 st.error(f"Analyse impossible : {err}")
             except ValueError:
@@ -190,7 +198,8 @@ with t_vue:
                .sort_values("score", ascending=False)
                .assign(niveau=lambda d: d["niveau"].astype(str).map(lambda n: f"{COULEUR_NIVEAU[n]} {n}"),
                        cloture=lambda d: d["end"].dt.date,
-                       **{f"p_{e}": (lambda d, e=e: d[f"p_{e}"] * 100) for e in EVENEMENTS}))
+                       **{f"p_{e}": (lambda d, e=e: d[f"p_{e}"] * 100) for e in EVENEMENTS})
+               .assign(p_CP_negatifs=lambda d: d["p_CP_negatifs"].where(~d["CP_deja_negatifs"])))
     st.dataframe(
         tableau[["nom", "cloture", "score", "niveau"] + [f"p_{e}" for e in EVENEMENTS]],
         hide_index=True, width="stretch",
@@ -203,7 +212,8 @@ with t_vue:
                                 "actifs_chute": "P(actifs −20 %)", "treso_moitie": "P(tréso ÷ 2)"}.items()},
         })
     st.caption("Score = rang de l'entreprise parmi celles de la même année (95 = plus risquée que 95 % d'entre elles). "
-               "Les colonnes P(…) sont les probabilités estimées de chaque dégradation l'année suivante.")
+               "Les colonnes P(…) sont les probabilités estimées de chaque dégradation l'année suivante "
+               "(P(CP < 0) vide : capitaux propres déjà négatifs).")
 
 # ------------------------------------------------------------------------------ 3. fiche entreprise
 with t_fiche:

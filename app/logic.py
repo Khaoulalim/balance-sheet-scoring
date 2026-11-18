@@ -26,7 +26,7 @@ RATIOS = {
     "AC_LC":         ("Liquidité générale", -1),
     "couv_interets": ("Couverture des intérêts", -1),
     "d_CA":          ("Croissance du chiffre d'affaires", -1),
-    "taille":        ("Taille (log10 des actifs)", -1),
+    "taille":        ("Petite taille (log10 des actifs)", -1),
 }
 
 
@@ -95,14 +95,28 @@ def risque_ratios(valeurs: dict, reference: pd.DataFrame) -> dict:
     return out
 
 
+def pct(p: float) -> str:
+    """0,07 -> « 7 % » (écriture française)."""
+    return f"{p * 100:.0f} %"
+
+
+def position(score: float) -> str:
+    """Formule lisible du rang : « plus risquée que 92 % » ou « moins risquée que 89 % »."""
+    if score >= 50:
+        return f"plus risquée que {score:.0f} % des entreprises de la même année"
+    return f"moins risquée que {100 - score:.0f} % des entreprises de la même année"
+
+
 def resume_executif(res: dict) -> str:
     """Une phrase de synthèse pour le banquier."""
     pire = max(EVENEMENTS, key=lambda e: res.get(f"rang_{e}", 0) or 0)
-    phrase = (f"Niveau de risque {res['niveau'].lower()} : score de {res['score']:.0f}/100, "
-              f"soit plus risquée que {res['score']:.0f} % des entreprises de la même année. ")
+    phrase = f"Niveau de risque {res['niveau'].lower()} : score de {res['score']:.0f}/100, {position(res['score'])}. "
+    if res.get("CP_deja_negatifs"):
+        phrase += "Les capitaux propres sont déjà négatifs : les dettes dépassent les actifs. "
+        pire = max((e for e in EVENEMENTS if e != "CP_negatifs"), key=lambda e: res.get(f"rang_{e}", 0) or 0)
     if res["niveau"] in ("Élevé", "Très élevé"):
         phrase += (f"Principal point d'attention : {EVENEMENTS[pire].lower()} "
-                   f"(probabilité {res[f'p_{pire}']:.0%}). Analyse approfondie recommandée.")
+                   f"(probabilité {pct(res[f'p_{pire}'])}). Analyse approfondie recommandée.")
     elif res["niveau"] == "Modéré":
         phrase += f"À surveiller en priorité : {EVENEMENTS[pire].lower()}."
     else:
@@ -110,10 +124,26 @@ def resume_executif(res: dict) -> str:
     return phrase
 
 
+def texte_proba(res: dict, e: str) -> str:
+    """Probabilité affichée, ou « Déjà négatifs » si l'événement a déjà eu lieu."""
+    if e == "CP_negatifs" and res.get("CP_deja_negatifs"):
+        return "Déjà négatifs"
+    return pct(res[f"p_{e}"])
+
+
+def bilan_ancien(res: dict, derniere_annee: int) -> str | None:
+    """Avertissement si le dernier bilan date de plus d'un an avant la dernière année disponible."""
+    annee = pd.Timestamp(res["end"]).year
+    if annee < derniere_annee - 1:
+        return (f"Dernier bilan publié : {annee}. L'entreprise ne dépose plus de rapport annuel depuis "
+                f"(rachat, sortie de cote ou faillite) : l'analyse décrit sa situation en {annee}.")
+    return None
+
+
 def rapport_html(res: dict) -> str:
     """Rapport autonome à télécharger (s'ouvre dans un navigateur, imprimable en PDF)."""
     lignes_risques = "".join(
-        f"<tr><td>{couleur(res[f'rang_{e}'])} {lib}</td><td>{res[f'p_{e}']:.0%}</td>"
+        f"<tr><td>{couleur(res[f'rang_{e}'])} {lib}</td><td>{texte_proba(res, e)}</td>"
         f"<td>{res[f'rang_{e}']:.0f} %</td></tr>" for e, lib in EVENEMENTS.items())
     faits = res.get("faits") or {}
     lignes_faits = "".join(f"<tr><td>{k}</td><td>{v:,.0f} $</td></tr>".replace(",", " ")
